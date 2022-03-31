@@ -825,6 +825,7 @@ ap_message GCS_MAVLINK::mavlink_id_to_ap_message_id(const uint32_t mavlink_id) c
         { MAVLINK_MSG_ID_WIND,                  MSG_WIND},
         { MAVLINK_MSG_ID_RANGEFINDER,           MSG_RANGEFINDER},
         { MAVLINK_MSG_ID_DISTANCE_SENSOR,       MSG_DISTANCE_SENSOR},
+        { MAVLINK_MSG_ID_LANDING_TARGET,        MSG_LANDING_TARGET},
             // request also does report:
         { MAVLINK_MSG_ID_TERRAIN_REQUEST,       MSG_TERRAIN},
         { MAVLINK_MSG_ID_BATTERY2,              MSG_BATTERY2},
@@ -4907,6 +4908,10 @@ bool GCS_MAVLINK::try_send_message(const enum ap_message id)
         send_distance_sensor();
         break;
 
+    case MSG_LANDING_TARGET:
+        send_landing_target();
+        break;
+    
     case MSG_CAMERA_FEEDBACK:
         {
             AP_Camera *camera = AP::camera();

@@ -1,0 +1,153 @@
+name: UAVLAS Copters build
+
+on: 
+ push:
+   branches: [ uls-alpha ]
+jobs:
+  build:
+    runs-on: 'ubuntu-latest'
+
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+          ref: uls-alpha
+          submodules: 'recursive'
+      - name: Install Arducopter tools
+        run: |
+          ./Tools/environment_install/install-prereqs-ubuntu.sh -y
+          git config --global url."git@github.com:".insteadOf git://github.com/
+         
+          
+      - name: Build Copters
+        run: |
+           ls -a /opt/gcc-arm-none-eabi-6-2017-q2-update/bin
+           export PATH=/opt/gcc-arm-none-eabi-6-2017-q2-update/bin:$PATH
+           arm-none-eabi-gcc -v
+           ./Tools/scripts/build_all_copters.sh
+
+      - name: Get current version
+        run: echo "::set-output name=TAG_VERSION::$(git describe --tags --dirty --match "ArduCopter*")"
+        id: version
+
+      - name: Get Copter Base version
+        working-directory: ./ArduCopter   
+        run: echo "::set-output name=TAG_VERSION::$(sed 's/#define THISFIRMWARE //g' version.h | grep ArduCopter)"
+        id: copterversion
+    
+      - name: Generate version file
+        run: echo ${{steps.version.outputs.TAG_VERSION}} > version.txt
+
+      - name: Generate ArduCopter version file
+        run: echo ${{steps.copterversion.outputs.TAG_VERSION}} > ac_version.txt
+      
+      
+      - name: Upload AC package
+        uses: actions/upload-artifact@v1
+        with:
+          name: uavlas-${{steps.version.outputs.TAG_VERSION}}.tar.gz
+          path: ./build/artefacts/uavlas-${{steps.version.outputs.TAG_VERSION}}.tar.gz
+
+      - name: Upload Info
+        uses: actions/upload-artifact@v2
+        with:
+          name: info
+          path: ${{github.workspace}}/info.md
+
+      - name: Upload Version
+        uses: actions/upload-artifact@v2
+        with:
+          name: version
+          path: version.txt
+
+      - name: Upload ACVersion
+        uses: actions/upload-artifact@v2
+        with:
+          name: ac_version
+          path: ac_version.txt    
+        
+
+  release_all:
+    needs: [build]
+    runs-on: ubuntu-latest
+    steps:
+
+    - name: Checkout ULSAC-Releases
+      uses: actions/checkout@v2
+      with:
+        repository: UAVLAS/ULSAC-Releases
+        token: ${{ secrets.YK_PAT}}
+        ref: main
+
+    - name: Create Assets Folder
+      run: |
+        mkdir -p assets
+
+    - name: Download all workflow run artifacts
+      uses: actions/download-artifact@v2
+      with:
+        path: ./assets
+
+    - name: Set version
+      shell: bash
+      run: |
+            cd ./assets
+            ls -all
+            ls ./version -all
+            ls ./info -all
+            cat ./version/version.txt
+            cat ./ac_version/ac_version.txt
+            echo "::set-output name=TAG_VERSION::$(cat ./version/version.txt)"
+      id: version
+    
+    - name: Set ac_version
+      shell: bash
+      run: |
+            cd ./assets
+            cat ./ac_version/ac_version.txt
+            echo "::set-output name=TAG_VERSION::$(cat ./ac_version/ac_version.txt)"
+      id: ac_version
+
+    - name: Update release repository
+      run: |
+           git config user.name "Yury Kapacheuski"
+           git config user.email "yk@uavlas.com"
+           git tag -f release-uls-${{steps.version.outputs.TAG_VERSION}}
+           git push --tags
+           git push
+
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+          GITHUB_TOKEN: ${{ secrets.YK_PAT }}
+      with:
+         tag_name: release-uls-${{steps.version.outputs.TAG_VERSION}}
+         release_name: Adrucopter firmware with UAVLAS devices Support - ${{steps.version.outputs.TAG_VERSION}} - based on ${{steps.ac_version.outputs.TAG_VERSION}}
+         body_path: ./assets/info/info.md
+         draft: true
+         prerelease: true
+         owner: uavlas
+         repo: ULSAC-Releases
+         commitish: main
+
+    - name: Upload Artifacts
+      run: |
+        cd ./assets
+        ls -a
+        hub release edit $(find . -type f -name "*.*" -printf "-a %p ") -m "" "release-uls-${{steps.version.outputs.TAG_VERSION}}"
+      env:
+        GITHUB_TOKEN: ${{ secrets.YK_PAT }}
+
+    - name: Publish release
+      uses: actions/github-script@v3
+      with:
+         github-token: ${{secrets.YK_PAT}}
+         script: |
+            github.repos.updateRelease({
+              owner: "uavlas",
+              repo: "ULSAC-Releases",
+              release_id: "${{ steps.create_release.outputs.id }}",
+              draft: false
+            });
+ 

@@ -21,6 +21,7 @@ class AC_PrecLand
     friend class AC_PrecLand_IRLock;
     friend class AC_PrecLand_SITL_Gazebo;
     friend class AC_PrecLand_SITL;
+    friend class AC_PrecLand_UAVLAS;
 
 public:
     AC_PrecLand();
@@ -69,6 +70,8 @@ public:
     // process a LANDING_TARGET mavlink message
     void handle_msg(const mavlink_landing_target_t &packet, uint32_t timestamp_ms);
 
+    void send_mavlink_landing_target(mavlink_channel_t chan);
+
     // parameter var table
     static const struct AP_Param::GroupInfo var_info[];
 
@@ -85,6 +88,7 @@ private:
         IRLOCK = 2,
         SITL_GAZEBO = 3,
         SITL = 4,
+        UAVLAS = 5,
     };
 
     // check if EKF got the time to initialize when the landing target was first detected
@@ -100,6 +104,13 @@ private:
 
     // get vehicle body frame 3D vector from vehicle to target.  returns true on success, false on failure
     bool retrieve_los_meas(Vector3f& target_vec_unit_body);
+
+    // get NED vector from vehicle to target.  returns true on success, false on failure
+    bool retrieve_los_ned_meas(Vector3f& target_ned);
+
+    // get vehicle body frame 3D vector (in absolute scale [m,m,m]) 
+    // from vehicle to target.  returns true on success, false on failure
+    bool retrieve_los_frd_meas(Vector3f& target_frd);
 
     // calculate target's position and velocity relative to the vehicle (used as input to position controller)
     // results are stored in_target_pos_rel_out_NE, _target_vel_rel_out_NE

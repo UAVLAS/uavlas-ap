@@ -7,6 +7,7 @@
 #include "AC_PrecLand_IRLock.h"
 #include "AC_PrecLand_SITL_Gazebo.h"
 #include "AC_PrecLand_SITL.h"
+#include "AC_PrecLand_UAVLAS.h"
 
 #include <AP_AHRS/AP_AHRS.h>
 
@@ -167,6 +168,10 @@ void AC_PrecLand::init(uint16_t update_rate_hz)
         case Type::IRLOCK:
             _backend = new AC_PrecLand_IRLock(*this, _backend_state);
             break;
+    // UAVLAS
+        case Type::UAVLAS:
+            _backend = new AC_PrecLand_UAVLAS(*this, _backend_state);
+            break;
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
         case Type::SITL_GAZEBO:
             _backend = new AC_PrecLand_SITL_Gazebo(*this, _backend_state);
@@ -190,31 +195,90 @@ void AC_PrecLand::update(float rangefinder_alt_cm, bool rangefinder_alt_valid)
     if (_backend == nullptr || _inertial_history == nullptr) {
         return;
     }
-
-    // append current velocity and attitude correction into history buffer
-    struct inertial_data_frame_s inertial_data_newest;
-    const AP_AHRS_NavEKF &_ahrs = AP::ahrs_navekf();
-    _ahrs.getCorrectedDeltaVelocityNED(inertial_data_newest.correctedVehicleDeltaVelocityNED, inertial_data_newest.dt);
-    inertial_data_newest.Tbn = _ahrs.get_rotation_body_to_ned();
-    Vector3f curr_vel;
-    nav_filter_status status;
-    if (!_ahrs.get_velocity_NED(curr_vel) || !_ahrs.get_filter_status(status)) {
-        inertial_data_newest.inertialNavVelocityValid = false;
-    } else {
-        inertial_data_newest.inertialNavVelocityValid = status.flags.horiz_vel;
-    }
-    curr_vel.z = -curr_vel.z;  // NED to NEU
-    inertial_data_newest.inertialNavVelocity = curr_vel;
-
-    inertial_data_newest.time_usec = AP_HAL::micros64();
-    _inertial_history->push_force(inertial_data_newest);
-
-    // update estimator of target position
-    if (_backend != nullptr && _enabled) {
+    if(_backend->provide_rel_meas()) {
+        // Backend provide complite information about position - do not requre processing
         _backend->update();
-        run_estimator(rangefinder_alt_cm*0.01f, rangefinder_alt_valid);
-    }
 
+        Vector3f _target_pos_rel_out_NED; // target's position relative in NED frame 
+        Vector3f _target_vel_rel_out_NED; // target's velocity relative in NED frame
+        if(_backend->get_rel_target(_target_pos_rel_out_NED,_target_vel_rel_out_NED)) {
+
+            _target_pos_rel_out_NE.x = _target_pos_rel_out_NED.x;
+            _target_pos_rel_out_NE.y = _target_pos_rel_out_NED.y;
+
+            _target_vel_rel_out_NE.x = _target_vel_rel_out_NED.x;
+            _target_vel_rel_out_NE.y = _target_vel_rel_out_NED.y;
+
+            _target_pos_rel_meas_NED = _target_pos_rel_out_NED;
+
+             // Apply land offset
+            const AP_AHRS &_ahrs = AP::ahrs();
+            Vector3f land_ofs_ned_m = _ahrs.get_rotation_body_to_ned() * Vector3f(_land_ofs_cm_x,_land_ofs_cm_y,0) * 0.01f;
+            _target_pos_rel_out_NE.x += land_ofs_ned_m.x;
+            _target_pos_rel_out_NE.y += land_ofs_ned_m.y;
+
+            _target_acquired = true;
+            _last_update_ms = AP_HAL::millis(); 
+        };
+
+    }else if(_backend->provide_abs_meas()) {
+        // Backend provide complite information about position - do not requre processing
+        _backend->update();
+
+        Vector3f _target_pos_abs_out_NED; // target's position absolute in NED frame 
+        Vector3f _target_vel_abs_out_NED; // target's velocity absolute in NED frame
+        if(_backend->get_abs_target(_target_pos_abs_out_NED,_target_vel_abs_out_NED)) {
+
+            Vector3f abs_curr_pos;
+            Vector3f abs_curr_vel;
+            if ((!AP::ahrs().get_relative_position_NED_origin(abs_curr_pos)) ||
+                    (!AP::ahrs().get_velocity_NED(abs_curr_vel))) {
+                return ;
+            }
+
+            _target_pos_rel_out_NE.x = _target_pos_abs_out_NED.x - abs_curr_pos.x ;
+            _target_pos_rel_out_NE.y = _target_pos_abs_out_NED.y - abs_curr_pos.y;
+
+            _target_vel_rel_out_NE.x = _target_vel_abs_out_NED.x - abs_curr_vel.x ;
+            _target_vel_rel_out_NE.y = _target_vel_abs_out_NED.y - abs_curr_vel.y;
+
+            _target_pos_rel_meas_NED = {_target_pos_rel_out_NE.x,_target_pos_rel_out_NE.y,_target_vel_abs_out_NED.z - abs_curr_pos.z}; // No measurmnts provided 
+
+            const AP_AHRS &_ahrs = AP::ahrs();
+            Vector3f land_ofs_ned_m = _ahrs.get_rotation_body_to_ned() * Vector3f(_land_ofs_cm_x,_land_ofs_cm_y,0) * 0.01f;
+            _target_pos_rel_out_NE.x += land_ofs_ned_m.x;
+            _target_pos_rel_out_NE.y += land_ofs_ned_m.y;
+
+            _target_acquired = true;
+            _last_update_ms = AP_HAL::millis(); 
+
+        };
+
+    } else {
+        // append current velocity and attitude correction into history buffer
+        struct inertial_data_frame_s inertial_data_newest;
+        const AP_AHRS_NavEKF &_ahrs = AP::ahrs_navekf();
+        _ahrs.getCorrectedDeltaVelocityNED(inertial_data_newest.correctedVehicleDeltaVelocityNED, inertial_data_newest.dt);
+        inertial_data_newest.Tbn = _ahrs.get_rotation_body_to_ned();
+        Vector3f curr_vel;
+        nav_filter_status status;
+        if (!_ahrs.get_velocity_NED(curr_vel) || !_ahrs.get_filter_status(status)) {
+            inertial_data_newest.inertialNavVelocityValid = false;
+        } else {
+            inertial_data_newest.inertialNavVelocityValid = status.flags.horiz_vel;
+        }
+        curr_vel.z = -curr_vel.z;  // NED to NEU
+        inertial_data_newest.inertialNavVelocity = curr_vel;
+
+        inertial_data_newest.time_usec = AP_HAL::micros64();
+        _inertial_history->push_force(inertial_data_newest);
+
+        // update estimator of target position
+        if (_backend != nullptr && _enabled) {
+            _backend->update();
+            run_estimator(rangefinder_alt_cm*0.01f, rangefinder_alt_valid);
+        }
+    }
     const uint32_t now = AP_HAL::millis();
     if (now - last_log_ms > 40) {  // 25Hz
         last_log_ms = now;
@@ -529,4 +593,19 @@ void AC_PrecLand::Write_Precland()
     };
     AP::logger().WriteBlock(&pkt, sizeof(pkt));
 }
+void AC_PrecLand::send_mavlink_landing_target(mavlink_channel_t chan)
+{
+    Vector3f target_pos_rel_meas_NED;
+    Vector2f target_pos_rel_NE;
+    Vector2f target_pos_NE;
+    
+    get_target_position_measurement_cm(target_pos_rel_meas_NED);
+    get_target_position_relative_cm(target_pos_rel_NE);
+    bool isValid = get_target_position_cm(target_pos_NE);
 
+    float q[4] = {1,0,0,0};   
+    mavlink_msg_landing_target_send(chan,AP_HAL::millis(),0,MAV_FRAME_LOCAL_OFFSET_NED,0,0,
+                                    target_pos_rel_meas_NED.z/100.f,0,0,
+                                    target_pos_rel_NE.x/100.f,target_pos_rel_NE.y/100.f,target_pos_rel_meas_NED.z/100.f,
+                                    q,LANDING_TARGET_TYPE_RADIO_BEACON,isValid);
+}

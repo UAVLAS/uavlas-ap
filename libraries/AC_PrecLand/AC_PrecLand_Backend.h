@@ -25,11 +25,25 @@ public:
     //  returns same as have_los_meas()
     virtual bool get_los_body(Vector3f& dir_body) = 0;
 
+    // provides a absolute position and velocity in NED of landing target
+    //  returns position and velocity
+    virtual bool get_abs_target(Vector3f& pos_ned,Vector3f& vel_ned){return false;};
+
+    // provides a relative position and velocity in NED of landing target
+    //  returns relative position and velocity
+    virtual bool get_rel_target(Vector3f& pos_ned,Vector3f& vel_ned){return false;};
+
     // returns system time in milliseconds of last los measurement
     virtual uint32_t los_meas_time_ms() = 0;
 
     // return true if there is a valid los measurement available
     virtual bool have_los_meas() = 0;
+
+    // return true if sensor provide absolute target position and velocity
+    virtual bool provide_abs_meas(){return false;};
+    
+    // return true if sensor provide relative target position and velocity
+    virtual bool provide_rel_meas(){return false;};
 
     // returns distance to target in meters (0 means distance is not known)
     virtual float distance_to_target() { return 0.0f; };

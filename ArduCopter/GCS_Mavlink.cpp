@@ -182,7 +182,13 @@ void GCS_MAVLINK_Copter::send_position_target_local_ned()
         0.0f); // yaw_rate
 #endif
 }
-
+void GCS_MAVLINK_Copter::send_landing_target()
+{
+// Send PrecLanding data for debug
+#if PRECISION_LANDING == ENABLED
+    copter.precland.send_mavlink_landing_target(chan);
+#endif
+}
 void GCS_MAVLINK_Copter::send_nav_controller_output() const
 {
     if (!copter.ap.initialised) {
@@ -487,6 +493,7 @@ static const ap_message STREAM_EXTRA3_msgs[] = {
     MSG_WIND,
     MSG_RANGEFINDER,
     MSG_DISTANCE_SENSOR,
+    MSG_LANDING_TARGET, 
 #if AP_TERRAIN_AVAILABLE && AC_TERRAIN
     MSG_TERRAIN,
 #endif
