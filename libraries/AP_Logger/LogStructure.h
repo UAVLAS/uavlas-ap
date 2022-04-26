@@ -1401,7 +1401,11 @@ LOG_STRUCTURE_FROM_VISUALODOM \
       { LOG_PSCE_MSG, sizeof(log_PSCE), \
         "PSCE", "Qffffffff", "TimeUS,TPE,PE,DVE,TVE,VE,DAE,TAE,AE", "smmnnnooo", "F00000000" }, \
       { LOG_PSCD_MSG, sizeof(log_PSCD), \
-        "PSCD", "Qffffffff", "TimeUS,TPD,PD,DVD,TVD,VD,DAD,TAD,AD", "smmnnnooo", "F00000000" }
+        "PSCD", "Qffffffff", "TimeUS,TPD,PD,DVD,TVD,VD,DAD,TAD,AD", "smmnnnooo", "F00000000" }, \
+      { LOG_ULSS_MSG, sizeof(log_UavlasStatus), \
+      "ULSS",  "QHHffffffffffBBB",    "TimeUS,Status,GUID,PX,PY,PZ,VX,VY,VZ,GR,GP,GY,MrxY,SQ,SS,SL", "s--mmmnnndddd---", "F000000000000000" }, \
+      { LOG_ULST_MSG, sizeof(log_UavlasTarget), \
+      "ULST",  "Qffffffffffff",    "TimeUS,APN,APE,APD,AVN,AVE,AVD,RPN,RPE,RPD,RVN,RVE,RVD,", "smmmnnnmmmnnn", "F000000000000" }  
 
 // @LoggerMessage: SBPH
 // @Description: Swift Health Data
