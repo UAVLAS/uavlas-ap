@@ -121,6 +121,13 @@ AP_UAVLAS_I2C::uls_stage_type_t AP_UAVLAS_I2C::on_connected()
             _target.abs_vel_ned[i] = cpx_uls_frame.abs_vel_ned[i];
 
         }
+        // TODO: Override sensor velocity data 
+        Vector3f curr_velNED;
+        if(AP::ahrs().get_velocity_NED(curr_velNED)) {
+            _target.rel_vel_ned[0] = -curr_velNED[0];
+            _target.rel_vel_ned[1] = -curr_velNED[1];
+            _target.rel_vel_ned[2] = -curr_velNED[2];
+        }
     }
     return AP_UAVLAS_I2C::CONNECTED;
 }
@@ -146,15 +153,8 @@ bool AP_UAVLAS_I2C::send_vehicle_info()
 
     if(AP::ahrs().get_velocity_NED(curr_vel)) {
         cpx_uls_vehicle.status |= ULS_VEHICLE_VNE_VALID|ULS_VEHICLE_VZ_VALID;
-    }{
-        Vector2f curr_velNE;
-        if(AP::ahrs().get_relative_position_NE_origin(curr_velNE)) {
-            cpx_uls_vehicle.status |= ULS_VEHICLE_VNE_VALID;
-            curr_vel[0] = curr_velNE[0];
-            curr_vel[1] = curr_velNE[1];
-            curr_vel[2] = 0;
-        }
     }
+    
 
     for(int i=0; i<3; i++) {
         cpx_uls_vehicle.abs_pos_ned[i] = curr_pos[i];
