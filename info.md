@@ -1,5 +1,5 @@
 ## Arducopter firmware with UAVLAS devices support.
 # Changes: 
-* Copter 4.1.5 Version Based.
+* Loiter mode velocity issues fixed.
 * System precision improved.
 * Bugs fixed. 
