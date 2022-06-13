@@ -5,6 +5,7 @@
 #include "AC_PrecLand_Backend.h"
 #include "AC_PrecLand_Companion.h"
 #include "AC_PrecLand_IRLock.h"
+#include "AC_PrecLand_UAVLAS.h"
 #include "AC_PrecLand_SITL_Gazebo.h"
 #include "AC_PrecLand_SITL.h"
 #include <GCS_MAVLink/GCS.h>
@@ -227,6 +228,10 @@ void AC_PrecLand::init(uint16_t update_rate_hz)
         case Type::IRLOCK:
             _backend = new AC_PrecLand_IRLock(*this, _backend_state);
             break;
+        // UAVLAS
+        case Type::UAVLAS:
+            _backend = new AC_PrecLand_UAVLAS(*this, _backend_state);
+            break;            
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
         case Type::SITL_GAZEBO:
             _backend = new AC_PrecLand_SITL_Gazebo(*this, _backend_state);
@@ -595,10 +600,34 @@ bool AC_PrecLand::retrieve_los_meas(Vector3f& target_vec_unit_body)
         return false;
     }
 }
+bool AC_PrecLand::retrieve_rel_ned_meas(Vector3f& target_rel_pos_ned)
+{
+    if (_backend->have_los_meas() && _backend->los_meas_time_ms() != _last_backend_los_meas_ms) {
+        _last_backend_los_meas_ms = _backend->los_meas_time_ms();
+        if (!_backend->get_pos_rel_ned_target(target_rel_pos_ned)) {
+           return false;
+        }
+        return true;
+    } else {
+        return false;
+    }
+}
 
 bool AC_PrecLand::construct_pos_meas_using_rangefinder(float rangefinder_alt_m, bool rangefinder_alt_valid)
 {
+    if (retrieve_rel_ned_meas(_target_pos_rel_meas_NED)){
+        // store the current relative down position so that if we need to retry landing, we know at this height landing target can be found
+        const AP_AHRS &_ahrs = AP::ahrs();
+        Vector3f pos_NED;
+        if (_ahrs.get_relative_position_NED_origin(pos_NED)) {
+                _last_target_pos_rel_origin_NED.z = _target_pos_rel_meas_NED.z;
+                _last_vehicle_pos_NED = pos_NED;
+            }
+        return true;
+    }
+
     Vector3f target_vec_unit_body;
+    
     if (retrieve_los_meas(target_vec_unit_body)) {
         const struct inertial_data_frame_s *inertial_data_delayed = (*_inertial_history)[0];
 

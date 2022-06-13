@@ -25,6 +25,10 @@ public:
     //  returns same as have_los_meas()
     virtual bool get_los_body(Vector3f& dir_body) = 0;
 
+    // provides a relative position in NED of landing target
+    //  returns relative position
+    virtual bool get_pos_rel_ned_target(Vector3f& pos_ned){return false;};
+
     // returns system time in milliseconds of last los measurement
     virtual uint32_t los_meas_time_ms() = 0;
 

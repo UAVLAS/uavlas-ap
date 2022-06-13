@@ -11,6 +11,7 @@
 class AC_PrecLand_Backend;
 class AC_PrecLand_Companion;
 class AC_PrecLand_IRLock;
+class AC_PrecLand_UAVLAS;
 class AC_PrecLand_SITL_Gazebo;
 class AC_PrecLand_SITL;
 
@@ -20,6 +21,7 @@ class AC_PrecLand
     friend class AC_PrecLand_Backend;
     friend class AC_PrecLand_Companion;
     friend class AC_PrecLand_IRLock;
+    friend class AC_PrecLand_UAVLAS;
     friend class AC_PrecLand_SITL_Gazebo;
     friend class AC_PrecLand_SITL;
 
@@ -123,6 +125,7 @@ private:
         IRLOCK = 2,
         SITL_GAZEBO = 3,
         SITL = 4,
+        UAVLAS = 5,
     };
 
     enum PLndOptions {
@@ -150,6 +153,10 @@ private:
 
     // get vehicle body frame 3D vector from vehicle to target.  returns true on success, false on failure
     bool retrieve_los_meas(Vector3f& target_vec_unit_body);
+
+    // get vehicle body frame NED position relative from vehicle to target.  returns true on success, false on failure
+    bool retrieve_rel_ned_meas(Vector3f& target_rel_pos_ned);
+
 
     // calculate target's position and velocity relative to the vehicle (used as input to position controller)
     // results are stored in_target_pos_rel_out_NE, _target_vel_rel_out_NE
