@@ -442,6 +442,13 @@ const AP_Param::GroupInfo QuadPlane::var_info2[] = {
     // @Increment: 0.05
     // @User: Standard
     AP_GROUPINFO("LAND_ALTCHG", 31, QuadPlane, landing_detect.detect_alt_change, 0.2),
+
+    // @Param: NAVALT_MIN
+    // @DisplayName: Minimum navigation altitude
+    // @Description: This is the altitude in meters above which navigation begins in auto takeoff. Below this altitude the target roll and pitch will be zero. A value of zero disables the feature
+    // @Range: 0 5
+    // @User: Advanced
+    AP_GROUPINFO("NAVALT_MIN", 32, QuadPlane, takeoff_navalt_min, 0),
     
     AP_GROUPEND
 };
@@ -471,6 +478,10 @@ static const struct AP_Param::defaults_table_struct defaults_table[] = {
     { "Q_WP_SPEED",       500 },
     { "Q_WP_ACCEL",       100 },
     { "Q_P_JERK_XY",      2   },
+    // lower rotational accel limits
+    { "Q_A_ACCEL_R_MAX", 40000 },
+    { "Q_A_ACCEL_P_MAX", 40000 },
+    { "Q_A_ACCEL_Y_MAX", 10000 },
 };
 
 /*
@@ -527,14 +538,16 @@ const AP_Param::ConversionInfo q_conversion_table[] = {
     { Parameters::k_param_quadplane, 1467,  AP_PARAM_FLOAT,  "Q_TILT_FIX_ANGLE" },
     { Parameters::k_param_quadplane, 1531,  AP_PARAM_FLOAT,  "Q_TILT_FIX_GAIN" },
 
-    { Parameters::k_param_quadplane, 22,  AP_PARAM_INT16, "Q_M_PWM_MIN" },
-    { Parameters::k_param_quadplane, 23,  AP_PARAM_INT16, "Q_M_PWM_MAX" },
-
     // PARAMETER_CONVERSION - Added: Jan-2022
     { Parameters::k_param_quadplane, 33,  AP_PARAM_FLOAT, "Q_WVANE_GAIN" },     // Moved from quadplane to weathervane library
     { Parameters::k_param_quadplane, 34,  AP_PARAM_FLOAT, "Q_WVANE_ANG_MIN" },  // Q_WVANE_MINROLL moved from quadplane to weathervane library
 };
 
+// PARAMETER_CONVERSION - Added: Oct-2021
+const AP_Param::ConversionInfo mot_pwm_conversion_table[] = {
+    { Parameters::k_param_quadplane, 22,  AP_PARAM_INT16, "Q_M_PWM_MIN" },
+    { Parameters::k_param_quadplane, 23,  AP_PARAM_INT16, "Q_M_PWM_MAX" },
+};
 
 QuadPlane::QuadPlane(AP_AHRS &_ahrs) :
     ahrs(_ahrs)
@@ -708,6 +721,12 @@ bool QuadPlane::setup(void)
     motors->update_throttle_range();
     motors->set_update_rate(rc_speed);
     attitude_control->parameter_sanity_check();
+
+    // Try to convert mot PWM params, if still invalid force conversion
+    AP_Param::convert_old_parameters(&mot_pwm_conversion_table[0], ARRAY_SIZE(mot_pwm_conversion_table));
+    if (!motors->check_mot_pwm_params()) {
+        AP_Param::convert_old_parameters(&mot_pwm_conversion_table[0], ARRAY_SIZE(mot_pwm_conversion_table), AP_Param::CONVERT_FLAG_FORCE);
+    }
 
     // setup the trim of any motors used by AP_Motors so I/O board
     // failsafe will disable motors
@@ -2790,15 +2809,39 @@ void QuadPlane::takeoff_controller(void)
         vel = poscontrol.velocity_match * 100;
     }
 
-    pos_control->set_accel_desired_xy_cmss(zero);
-    pos_control->set_vel_desired_xy_cms(vel);
-    pos_control->input_vel_accel_xy(vel, zero);
+    /*
+      support zeroing roll/pitch during early part of takeoff. This
+      can help particularly with poor GPS velocity data
+     */
+    bool no_navigation = false;
+    if (takeoff_navalt_min > 0) {
+        uint32_t now = AP_HAL::millis();
+        const float alt = plane.current_loc.alt*0.01;
+        if (takeoff_last_run_ms == 0 ||
+            now - takeoff_last_run_ms > 1000) {
+            takeoff_start_alt = alt;
+        }
+        takeoff_last_run_ms = now;
+        if (alt - takeoff_start_alt < takeoff_navalt_min) {
+            no_navigation = true;
+        }
+    }
+
+    if (no_navigation) {
+        plane.nav_roll_cd = 0;
+        plane.nav_pitch_cd = 0;
+        pos_control->relax_velocity_controller_xy();
+    } else {
+        pos_control->set_accel_desired_xy_cmss(zero);
+        pos_control->set_vel_desired_xy_cms(vel);
+        pos_control->input_vel_accel_xy(vel, zero);
+
+        // nav roll and pitch are controller by position controller
+        plane.nav_roll_cd = pos_control->get_roll_cd();
+        plane.nav_pitch_cd = pos_control->get_pitch_cd();
+    }
 
     run_xy_controller();
-
-    // nav roll and pitch are controller by position controller
-    plane.nav_roll_cd = pos_control->get_roll_cd();
-    plane.nav_pitch_cd = pos_control->get_pitch_cd();
 
     attitude_control->input_euler_angle_roll_pitch_euler_rate_yaw(plane.nav_roll_cd,
                                                                   plane.nav_pitch_cd,
