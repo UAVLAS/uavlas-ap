@@ -25,8 +25,12 @@ public:
     //  returns same as have_los_meas()
     virtual bool get_los_body(Vector3f& dir_body) = 0;
 
+    // provides a absolute position  in NED of landing target
+    //  returns operation status and absolute position 
+    virtual bool get_pos_abs_ned_target(Vector3f& pos_ned){return false;};
+
     // provides a relative position in NED of landing target
-    //  returns relative position
+    //  returns operation status and relative position 
     virtual bool get_pos_rel_ned_target(Vector3f& pos_ned){return false;};
 
     // returns system time in milliseconds of last los measurement

@@ -23,7 +23,7 @@ public:
     void update() override;
 
     // provides a relative position in NED of landing target
-    // returns relative position and velocity
+    // returns relative position
     bool get_pos_rel_ned_target(Vector3f& pos_ned) override;
 
     // provides a unit vector towards the target in body frame

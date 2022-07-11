@@ -604,13 +604,20 @@ bool AC_PrecLand::retrieve_rel_ned_meas(Vector3f& target_rel_pos_ned)
 {
     if (_backend->have_los_meas() && _backend->los_meas_time_ms() != _last_backend_los_meas_ms) {
         _last_backend_los_meas_ms = _backend->los_meas_time_ms();
-        if (!_backend->get_pos_rel_ned_target(target_rel_pos_ned)) {
-           return false;
+        if (_backend->get_pos_rel_ned_target(target_rel_pos_ned)) {
+           return true;
         }
-        return true;
-    } else {
-        return false;
+        const AP_AHRS &_ahrs = AP::ahrs();
+        Vector3f pos_NED;
+        Vector3f _target_pos_abs_NED;
+        if (_backend->get_pos_abs_ned_target(_target_pos_abs_NED) &&
+            (_ahrs.get_relative_position_NED_origin(pos_NED))) {
+            target_rel_pos_ned = _target_pos_abs_NED - pos_NED;
+           return true;
+        }
     }
+    return false;
+    
 }
 
 bool AC_PrecLand::construct_pos_meas_using_rangefinder(float rangefinder_alt_m, bool rangefinder_alt_valid)
